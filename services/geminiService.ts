@@ -1,4 +1,5 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, Type } from "@google/genai";
+import { OfficialDocInfo } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -40,11 +41,14 @@ export const translateDocument = async (
   mimeType: string,
   targetLanguage: string,
   mode: 'speed' | 'detailed'
-): Promise<string> => {
+): Promise<{ 
+  text: string; 
+  summary: string; 
+  actionItems: string[];
+  address: string | null; 
+  officialInfo: OfficialDocInfo | null 
+}> => {
   try {
-    // Configure thinking budget based on mode
-    // Speed: 0 (disable thinking for max speed)
-    // Detailed: 2048 (allow some thinking for better extraction of complex docs)
     const thinkingBudget = mode === 'speed' ? 0 : 2048;
 
     const response = await ai.models.generateContent({
@@ -58,23 +62,126 @@ export const translateDocument = async (
             },
           },
           {
-            text: `You are a helpful assistant for people who cannot read well. 
-            1. Analyze the provided document (image or PDF).
-            2. Extract all the visible text.
-            3. Translate the extracted text into ${targetLanguage}.
-            4. Return ONLY the translated text. Do not add markdown formatting like **bold** or headers unless they are in the original document structure. Keep it simple and readable.`,
+            text: `You are an intelligent document assistant specializing in accessibility.
+            1. Analyze the provided document (it could be a standard letter, a bill, or a Government Order/Form).
+            2. Extract all visible text and translate it accurately into ${targetLanguage}. Maintain the original formatting (lists, paragraphs) using Markdown.
+            3. Create a simplified, easy-to-understand "Summary" in ${targetLanguage} that explains the core message to someone with low literacy.
+            4. Detect if this is an Official Government Document (like a GO, Circular, or Form). If yes, extract:
+               - GO Number / File Number
+               - Department Name
+               - Date
+               - Subject / Abstract
+            5. Identify if there is a specific physical address mentioned (e.g., office location).
+            6. Extract a list of specific "Action Items" in ${targetLanguage}. These are things the user needs to do (e.g., "Submit by Friday", "Attach Aadhar Card", "Sign at the bottom").
+            
+            Return the result in JSON format.`,
           },
         ],
       },
       config: {
-        thinkingConfig: { thinkingBudget: thinkingBudget }
+        thinkingConfig: { thinkingBudget: thinkingBudget },
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            translation: { type: Type.STRING, description: "Full translated text in markdown" },
+            summary: { type: Type.STRING, description: "Simple summary for common people" },
+            actionItems: { 
+              type: Type.ARRAY, 
+              items: { type: Type.STRING },
+              description: "List of tasks or actions the user needs to perform" 
+            },
+            address: { type: Type.STRING, nullable: true },
+            isOfficialDocument: { type: Type.BOOLEAN },
+            officialDetails: {
+              type: Type.OBJECT,
+              properties: {
+                goNumber: { type: Type.STRING, nullable: true },
+                department: { type: Type.STRING, nullable: true },
+                date: { type: Type.STRING, nullable: true },
+                subject: { type: Type.STRING, nullable: true }
+              },
+              nullable: true
+            }
+          },
+          required: ["translation", "summary", "isOfficialDocument", "actionItems"]
+        }
       }
     });
 
-    return response.text || "Could not extract text.";
+    if (response.text) {
+      const result = JSON.parse(response.text);
+      
+      let officialInfo: OfficialDocInfo | null = null;
+      if (result.isOfficialDocument) {
+        officialInfo = {
+          isOfficial: true,
+          goNumber: result.officialDetails?.goNumber,
+          department: result.officialDetails?.department,
+          date: result.officialDetails?.date,
+          subject: result.officialDetails?.subject
+        };
+      }
+
+      return {
+        text: result.translation || "Could not extract text.",
+        summary: result.summary || "No summary available.",
+        actionItems: result.actionItems || [],
+        address: result.address || null,
+        officialInfo: officialInfo
+      };
+    }
+    
+    return { text: "Could not extract text.", summary: "", actionItems: [], address: null, officialInfo: null };
+
   } catch (error) {
     console.error("Translation error:", error);
     throw new Error("Failed to translate document.");
+  }
+};
+
+export const resolveLocation = async (address: string): Promise<{ latitude?: number, longitude?: number, mapUri?: string }> => {
+  try {
+    // Using gemini-2.5-flash for Maps Grounding
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `Get the precise latitude and longitude coordinates for this address: "${address}". 
+      Format your response exactly like this: "LAT: 12.3456, LNG: 67.8901".`,
+      config: {
+        tools: [{ googleMaps: {} }],
+      },
+    });
+
+    const text = response.text || "";
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+
+    // Parse text for coordinates
+    const latMatch = text.match(/LAT:\s*(-?\d+(\.\d+)?)/i);
+    const lngMatch = text.match(/LNG:\s*(-?\d+(\.\d+)?)/i);
+
+    if (latMatch && lngMatch) {
+      latitude = parseFloat(latMatch[1]);
+      longitude = parseFloat(lngMatch[1]);
+    }
+
+    // Extract map URI from grounding chunks
+    let mapUri: string | undefined;
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (groundingChunks) {
+      for (const chunk of groundingChunks) {
+        if (chunk.web?.uri) {
+           // Sometimes maps grounding returns web uri for the place
+           mapUri = chunk.web.uri;
+           break;
+        }
+      }
+    }
+
+    return { latitude, longitude, mapUri };
+  } catch (error) {
+    console.error("Location resolution error:", error);
+    return {};
   }
 };
 

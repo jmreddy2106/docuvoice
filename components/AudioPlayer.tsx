@@ -2,11 +2,22 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, FastForward, RotateCcw } from 'lucide-react';
 import { PLAYBACK_SPEEDS } from '../constants';
 
-interface AudioPlayerProps {
-  audioBuffer: AudioBuffer | null;
+interface AudioPlayerLabels {
+  title: string;
+  restart: string;
+  play: string;
+  pause: string;
+  speed: string;
+  statusPlaying: string;
+  statusIdle: string;
 }
 
-const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
+interface AudioPlayerProps {
+  audioBuffer: AudioBuffer | null;
+  labels: AudioPlayerLabels;
+}
+
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer, labels }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [progress, setProgress] = useState(0);
@@ -158,7 +169,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
         <span className="bg-indigo-600 text-white p-1 rounded-full">
            <Play size={16} fill="currentColor" />
         </span>
-        Voice Reader
+        {labels.title}
       </h3>
       
       <div className="flex flex-col sm:flex-row items-center gap-4 justify-between">
@@ -168,7 +179,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
           <button
             onClick={resetAudio}
             className="p-3 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
-            title="Restart"
+            title={labels.restart}
           >
             <RotateCcw size={24} />
           </button>
@@ -180,7 +191,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
                 ? 'bg-amber-100 text-amber-600 hover:bg-amber-200' 
                 : 'bg-indigo-600 text-white hover:bg-indigo-700'
             }`}
-            title={isPlaying ? "Pause" : "Read Aloud"}
+            title={isPlaying ? labels.pause : labels.play}
           >
             {isPlaying ? (
               <Pause size={32} fill="currentColor" />
@@ -193,7 +204,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
         {/* Speed Control */}
         <div className="flex items-center gap-2 w-full sm:w-auto justify-center bg-slate-50 p-2 rounded-lg border border-slate-200">
           <FastForward size={20} className="text-slate-400" />
-          <label htmlFor="speed" className="text-sm font-medium text-slate-600">Speed:</label>
+          <label htmlFor="speed" className="text-sm font-medium text-slate-600">{labels.speed}:</label>
           <select
             id="speed"
             value={playbackSpeed}
@@ -210,7 +221,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer }) => {
       </div>
       
       <p className="text-center text-slate-400 text-sm mt-4">
-        {isPlaying ? "Reading document..." : "Press play to listen"}
+        {isPlaying ? labels.statusPlaying : labels.statusIdle}
       </p>
     </div>
   );
