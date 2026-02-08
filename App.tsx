@@ -586,7 +586,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <main className="max-w-3xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 relative z-0">
+      <main className="max-w-6xl w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 relative z-0">
         
         {/* Upload Section (Simplified) */}
         <div className="p-8 border-b border-slate-100">
@@ -877,6 +877,9 @@ const App: React.FC = () => {
                     setLocationInfo(null);
                     setOfficialInfo(null);
                     setCurrentHistoryId(null);
+                    if (fileInputRef.current) {
+                      fileInputRef.current.value = '';
+                    }
                   }}
                   className="w-full py-4 bg-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-300 transition-colors"
                 >

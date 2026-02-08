@@ -35,9 +35,10 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioBuffer, labels }) => {
     }
     return () => {
       stopAudio();
-      if (audioContextRef.current?.state !== 'closed') {
-        audioContextRef.current?.close();
-      }
+      audioContextRef.current?.suspend();
+      // if (audioContextRef.current?.state !== 'closed') {
+      //   audioContextRef.current?.close();
+      // }
     };
   }, []);
 
